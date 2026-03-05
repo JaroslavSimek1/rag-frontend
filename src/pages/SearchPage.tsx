@@ -24,7 +24,7 @@ const SearchPage: React.FC = () => {
         try {
             const response = await axios.post(`${API_BASE}/api/search`, {
                 query,
-                k: 3
+                k: 5
             });
             setResults(response.data);
         } catch (err) {
