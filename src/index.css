@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg text-text-primary antialiased font-sans min-h-screen overflow-x-hidden;
+    /* Optional sleek background pattern */
+    background-image: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.15), transparent 60%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-surface backdrop-blur-glass border border-border shadow-glass rounded-2xl;
+  }
+  
+  .glass-input {
+    @apply bg-black/40 border border-border text-white placeholder-text-secondary rounded-xl px-4 py-3 outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all duration-300;
+  }
+  
+  .btn-primary {
+    @apply relative overflow-hidden bg-accent text-white font-medium px-6 py-3 rounded-xl transition-all duration-300 hover:shadow-glow hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0;
+  }
+  
+  .text-gradient {
+    @apply bg-glow-gradient bg-clip-text text-transparent;
+  }
+}
+
+/* Custom Scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
