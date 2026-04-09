@@ -2,8 +2,9 @@ import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react
 import IngestionPage from './pages/IngestionPage';
 import SearchPage from './pages/SearchPage';
 import LoginPage from './pages/LoginPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Database, Search, Bot, LogIn, LogOut, Loader2 } from 'lucide-react';
+import { Database, Search, Bot, LogIn, LogOut, Loader2, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,7 @@ function Navigation() {
 
           <div className="flex items-center space-x-2">
             {user?.role === 'admin' && (
+              <>
               <Link
                 to="/"
                 className={`relative flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
@@ -61,6 +63,26 @@ function Navigation() {
                 <Database className="w-4 h-4 mr-2" />
                 Ingestion
               </Link>
+              <Link
+                to="/analytics"
+                className={`relative flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  location.pathname === '/analytics'
+                    ? 'text-white'
+                    : 'text-text-secondary hover:text-white hover:bg-surface'
+                }`}
+              >
+                {location.pathname === '/analytics' && (
+                  <motion.div
+                    layoutId="nav-pill"
+                    className="absolute inset-0 bg-accent/20 border border-accent/30 rounded-xl -z-10"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  />
+                )}
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </Link>
+              </>
             )}
 
             <Link
@@ -133,6 +155,11 @@ function App() {
               <Route path="/" element={
                 <ProtectedRoute>
                   <IngestionPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/analytics" element={
+                <ProtectedRoute>
+                  <AnalyticsPage />
                 </ProtectedRoute>
               } />
             </Routes>

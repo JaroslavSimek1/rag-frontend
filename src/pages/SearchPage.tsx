@@ -5,7 +5,7 @@ import api from '../api';
 
 interface SearchResult {
     answer: string;
-    sources: { path: string; score: number; filename?: string }[];
+    sources: { path: string; score: number; filename?: string; fragment?: string; job_id?: string }[];
 }
 
 const SearchPage: React.FC = () => {
@@ -182,10 +182,15 @@ const SearchPage: React.FC = () => {
                                                         {(source.score * 100).toFixed(1)}% Match
                                                     </span>
                                                 </div>
+                                                {source.fragment && (
+                                                    <div className="text-xs text-text-secondary/80 bg-white/5 p-3 rounded-lg mb-3 border-l-2 border-accent/30 italic leading-relaxed line-clamp-4">
+                                                        {source.fragment}
+                                                    </div>
+                                                )}
                                                 {source.filename && (
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleOpenFile(source.filename!)}
-                                                        className="mt-2 text-xs flex items-center gap-1 text-accent hover:text-accent-hover transition-colors bg-accent/10 px-3 py-1.5 rounded-lg w-full justify-center border border-accent/20 hover:border-accent/50"
+                                                        className="text-xs flex items-center gap-1 text-accent hover:text-accent-hover transition-colors bg-accent/10 px-3 py-1.5 rounded-lg w-full justify-center border border-accent/20 hover:border-accent/50"
                                                     >
                                                         Zobrazit zdrojový dokument
                                                     </button>

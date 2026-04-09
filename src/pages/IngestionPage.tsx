@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, RefreshCw, Link2, ShieldAlert, CheckCircle2, ChevronRight, Trash2, FileText, X, ExternalLink, ChevronLeft } from 'lucide-react';
+import { Loader2, RefreshCw, Link2, ShieldAlert, CheckCircle2, ChevronRight, Trash2, FileText, X, ExternalLink, ChevronLeft, Image, CheckSquare, AlertTriangle, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api';
@@ -8,9 +8,28 @@ interface Job {
   id: number;
   url: string;
   status: string;
+  strategy: string | null;
   error_code: string | null;
   started_ts: string;
+  completed_ts: string | null;
+  max_depth: number;
   has_evidence: boolean;
+  screenshot_count: number;
+}
+
+
+
+interface JobDetail {
+  id: number;
+  url: string;
+  status: string;
+  strategy: string | null;
+  error_code: string | null;
+  started_ts: string;
+  completed_ts: string | null;
+  max_depth: number;
+  source_name: string | null;
+  evidences: { id: number; type: string; storage_uri: string; file_hash: string; created_ts: string }[];
 }
 
 const IngestionPage: React.FC = () => {
@@ -21,6 +40,8 @@ const IngestionPage: React.FC = () => {
     const [deepCrawl, setDeepCrawl] = useState(false);
     const [maxDepth, setMaxDepth] = useState(2);
     const [schedule, setSchedule] = useState('');
+    const [permissionType, setPermissionType] = useState('public');
+    const [strategy, setStrategy] = useState('');
     const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
     const [browsingJob, setBrowsingJob] = useState<number | null>(null);
     const [fileList, setFileList] = useState<string[]>([]);
@@ -28,9 +49,14 @@ const IngestionPage: React.FC = () => {
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [isFilesLoading, setIsFilesLoading] = useState(false);
 
+    // Incident detail
+    const [detailJob, setDetailJob] = useState<JobDetail | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+
     const loadJobs = async () => {
         try {
-            const response = await api.get(`/api/jobs`);
+            const response = await api.get(`/api/jobs?limit=50`);
             setJobs(response.data.jobs);
         } catch (err) {
             console.error("Failed to load jobs", err);
@@ -51,7 +77,6 @@ const IngestionPage: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-
         try {
             const response = await api.post(`/api/ingest`, {
                 url,
@@ -59,8 +84,9 @@ const IngestionPage: React.FC = () => {
                 deep_crawl: deepCrawl,
                 max_depth: maxDepth,
                 schedule: schedule || null,
+                permission_type: permissionType,
+                strategy: strategy || null,
             });
-            
             const { status, message } = response.data;
             if (status === 'skipped') {
                 showToast(message, 'error');
@@ -79,7 +105,6 @@ const IngestionPage: React.FC = () => {
 
     const handleDelete = async (id: number) => {
         if (!confirm("Are you sure you want to delete this operation and all its data?")) return;
-        
         try {
             await api.delete(`/api/jobs/${id}`);
             showToast("Operation deleted successfully", "success");
@@ -88,6 +113,37 @@ const IngestionPage: React.FC = () => {
             console.error(err);
             showToast("Failed to delete operation", "error");
         }
+    };
+
+    const handleResolve = async (id: number) => {
+        try {
+            await api.put(`/api/jobs/${id}/resolve`);
+            showToast("Incident resolved", "success");
+            loadJobs();
+            setDetailJob(null);
+        } catch (err: any) {
+            showToast(err.response?.data?.detail || "Failed to resolve", "error");
+        }
+    };
+
+    const openJobDetail = async (jobId: number) => {
+        setDetailLoading(true);
+        setDetailJob(null);
+        setScreenshotUrl(null);
+        try {
+            const response = await api.get(`/api/jobs/${jobId}/detail`);
+            setDetailJob(response.data);
+        } catch (err) {
+            console.error(err);
+            showToast("Failed to load job detail", "error");
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const viewScreenshot = (evidenceId: number) => {
+        const baseUrl = import.meta.env.DEV ? 'http://127.0.0.1:8000' : '';
+        setScreenshotUrl(`${baseUrl}/api/evidence/${evidenceId}/file`);
     };
 
     const openFileBrowser = async (jobId: number) => {
@@ -137,15 +193,17 @@ const IngestionPage: React.FC = () => {
         }
     };
 
+    const incidents = jobs.filter(j => j.status === 'FAILED' || j.status === 'CAPTCHA_DETECTED');
+
     return (
-        <motion.div 
+        <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="space-y-12 max-w-4xl mx-auto"
         >
             <header className="text-center space-y-4">
-                <motion.div 
+                <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2 }}
@@ -163,7 +221,7 @@ const IngestionPage: React.FC = () => {
                 </p>
             </header>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.3 }}
@@ -174,7 +232,7 @@ const IngestionPage: React.FC = () => {
                     <Link2 className="w-5 h-5 mr-2 text-accent" />
                     Connect New Source
                 </h2>
-                
+
                 <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-4">
                         <input
@@ -193,39 +251,60 @@ const IngestionPage: React.FC = () => {
                             required
                             className="glass-input"
                         />
-                        <div className="md:col-span-full px-2 mb-2">
-                            <label className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2 block">
-                                Auto Schedule
-                            </label>
-                            <select
-                                value={schedule}
-                                onChange={(e) => setSchedule(e.target.value)}
-                                className="glass-input w-full md:w-auto min-w-[200px]"
-                            >
-                                <option value="">Manual only</option>
-                                <option value="hourly">Hourly</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                            </select>
+
+                        <div className="md:col-span-full grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
+                            <div>
+                                <label className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2 block">
+                                    Auto Schedule
+                                </label>
+                                <select value={schedule} onChange={(e) => setSchedule(e.target.value)} className="glass-input w-full">
+                                    <option value="">Manual only</option>
+                                    <option value="hourly">Hourly</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2 block">
+                                    Legal Basis
+                                </label>
+                                <select value={permissionType} onChange={(e) => setPermissionType(e.target.value)} className="glass-input w-full">
+                                    <option value="public">Public data</option>
+                                    <option value="legitimate_interest">Legitimate interest</option>
+                                    <option value="consent">Consent</option>
+                                    <option value="contract">Contract</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2 block">
+                                    Strategy
+                                </label>
+                                <select value={strategy} onChange={(e) => setStrategy(e.target.value)} className="glass-input w-full">
+                                    <option value="">Auto-detect</option>
+                                    <option value="html">HTML parsing</option>
+                                    <option value="render">Rendered DOM</option>
+                                    <option value="screenshot">Screenshot + OCR</option>
+                                </select>
+                            </div>
                         </div>
 
                          <div className="flex items-center gap-2 px-2 md:col-span-full mb-2">
-                             <input 
-                                 type="checkbox" 
-                                 id="deepCrawl" 
-                                 checked={deepCrawl} 
-                                 onChange={(e) => setDeepCrawl(e.target.checked)} 
+                             <input
+                                 type="checkbox"
+                                 id="deepCrawl"
+                                 checked={deepCrawl}
+                                 onChange={(e) => setDeepCrawl(e.target.checked)}
                                  className="w-4 h-4 text-accent bg-surface border-border rounded focus:ring-accent/50 cursor-pointer"
                              />
                              <label htmlFor="deepCrawl" className="text-sm font-medium text-text-secondary cursor-pointer select-none">
                                  Deep Crawl (Process subpages)
                              </label>
                          </div>
-                         
+
                          <AnimatePresence>
                              {deepCrawl && (
-                                <motion.div 
+                                <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
@@ -238,23 +317,17 @@ const IngestionPage: React.FC = () => {
                                                 {maxDepth}
                                             </span>
                                         </div>
-                                        <input 
-                                            type="range" 
-                                            min="1" 
-                                            max="50" 
-                                            value={maxDepth} 
+                                        <input
+                                            type="range" min="1" max="50" value={maxDepth}
                                             onChange={(e) => setMaxDepth(parseInt(e.target.value))}
                                             className="w-full accent-accent bg-white/5 h-1.5 rounded-lg appearance-none cursor-pointer"
                                         />
                                         <div className="flex justify-between text-[10px] text-text-muted px-1">
-                                            <span>1</span>
-                                            <span>25</span>
-                                            <span>50</span>
+                                            <span>1</span><span>25</span><span>50</span>
                                         </div>
                                         {maxDepth > 10 && (
                                             <div className="flex items-center gap-1.5 mt-1 text-[11px] text-error/80 italic">
-                                                <ShieldAlert className="w-3 h-3" />
-                                                High depth might take a very long time!
+                                                <ShieldAlert className="w-3 h-3" /> High depth might take a very long time!
                                             </div>
                                         )}
                                     </div>
@@ -263,12 +336,8 @@ const IngestionPage: React.FC = () => {
                          </AnimatePresence>
 
                         <div className="md:col-span-full flex justify-start">
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="btn-primary"
-                            >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 
+                            <button type="submit" disabled={loading} className="btn-primary">
+                                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> :
                                  <span className="flex items-center gap-2">Ingest <ChevronRight className="w-4 h-4" /></span>}
                             </button>
                         </div>
@@ -276,7 +345,54 @@ const IngestionPage: React.FC = () => {
                 </form>
             </motion.div>
 
-            <motion.div 
+            {/* Incident Panel */}
+            {incidents.length > 0 && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                    <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2 px-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" />
+                        Incidents ({incidents.length})
+                    </h2>
+                    <div className="space-y-3">
+                        {incidents.map(job => {
+                            const theme = getStatusTheme(job.status);
+                            return (
+                                <motion.div key={`inc-${job.id}`} className={`glass-panel p-5 border-l-4 ${theme.border} !rounded-l-sm`}>
+                                    <div className="flex justify-between items-start">
+                                        <div className="space-y-1.5 flex-1 min-w-0">
+                                            <div className="font-medium text-white truncate text-lg">{job.url}</div>
+                                            <div className="text-sm text-text-secondary flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                <span className="font-mono text-xs opacity-70">JOB-{job.id.toString().padStart(4, '0')}</span>
+                                                <span>•</span>
+                                                <span className={`${theme.text} font-semibold`}>{job.status}</span>
+                                                {job.error_code && <span className="text-error/80">— {job.error_code}</span>}
+                                            </div>
+                                            {job.screenshot_count > 0 && (
+                                                <span className="inline-flex items-center gap-1 text-xs bg-purple-500/10 border border-purple-500/20 text-purple-400 px-2 py-0.5 rounded-md mt-1">
+                                                    <Image className="w-3 h-3" /> {job.screenshot_count} screenshot(s)
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => openJobDetail(job.id)} className="p-2 text-accent hover:bg-accent/10 rounded-lg transition-colors" title="View Detail">
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleResolve(job.id)} className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Resolve">
+                                                <CheckSquare className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(job.id)} className="p-2 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors" title="Delete">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Active Operations */}
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
@@ -284,35 +400,24 @@ const IngestionPage: React.FC = () => {
             >
                 <div className="flex justify-between items-center px-2">
                     <h2 className="text-xl font-semibold tracking-tight">Active Operations</h2>
-                    <button 
-                        onClick={loadJobs}
-                        className="text-text-secondary hover:text-white flex items-center gap-2 text-sm px-4 py-2 rounded-xl transition-all hover:bg-surface border border-transparent hover:border-border"
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                        Refresh
+                    <button onClick={loadJobs} className="text-text-secondary hover:text-white flex items-center gap-2 text-sm px-4 py-2 rounded-xl transition-all hover:bg-surface border border-transparent hover:border-border">
+                        <RefreshCw className="w-4 h-4" /> Refresh
                     </button>
                 </div>
 
                 <div className="space-y-3">
                     <AnimatePresence>
                         {jobs.length === 0 ? (
-                            <motion.div 
-                              initial={{ opacity: 0 }} 
-                              animate={{ opacity: 1 }} 
-                              className="text-center py-12 glass-panel border-dashed"
-                            >
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 glass-panel border-dashed">
                                 <p className="text-text-secondary">Awaiting initial task submission...</p>
                             </motion.div>
                         ) : (
                             jobs.map((job: Job) => {
                                 const theme = getStatusTheme(job.status);
                                 return (
-                                <motion.div 
-                                    key={job.id} 
-                                    layout
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
+                                <motion.div
+                                    key={job.id} layout
+                                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                                     className={`glass-panel p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-border-focus transition-all duration-300 border-l-4 ${theme.border} !rounded-l-sm`}
                                 >
                                     <div className="space-y-1.5 flex-1 min-w-0">
@@ -321,46 +426,37 @@ const IngestionPage: React.FC = () => {
                                             <span className="font-mono text-xs opacity-70">JOB-{job.id.toString().padStart(4, '0')}</span>
                                             <span>•</span>
                                             <span>{new Date(job.started_ts).toLocaleTimeString()}</span>
-                                            
+                                            {job.strategy && (
+                                                <><span>•</span><span className="text-xs bg-white/5 px-2 py-0.5 rounded">{job.strategy}</span></>
+                                            )}
                                             {job.has_evidence && (
-                                                <>
-                                                    <span>•</span>
-                                                    <span className="inline-flex items-center gap-1 text-xs bg-purple-500/10 border border-purple-500/20 text-purple-400 px-2 py-0.5 rounded-md">
-                                                        <ShieldAlert className="w-3 h-3" />
-                                                        Incident Evidence
-                                                    </span>
-                                                </>
+                                                <><span>•</span>
+                                                <span className="inline-flex items-center gap-1 text-xs bg-purple-500/10 border border-purple-500/20 text-purple-400 px-2 py-0.5 rounded-md">
+                                                    <ShieldAlert className="w-3 h-3" /> Evidence
+                                                </span></>
                                             )}
                                         </div>
                                         {job.error_code && (
                                             <div className="text-sm text-error/90 mt-2 font-medium bg-error/10 inline-block px-2 py-1 rounded">
-                                                Runtime Exception: {job.error_code}
+                                                {job.error_code}
                                             </div>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <div className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase border border-white/5 backdrop-blur-md shadow-inner ${theme.bg} ${theme.text}`}>
                                             {job.status === 'COMPLETED' ? (
-                                                <span className="flex items-center gap-1.5">
-                                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                                    Success
-                                                </span>
+                                                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Success</span>
                                             ) : job.status}
                                         </div>
+                                        <button onClick={() => openJobDetail(job.id)} className="p-2 text-text-secondary hover:text-accent hover:bg-accent/10 rounded-lg transition-colors" title="View Detail">
+                                            <Eye className="w-4 h-4" />
+                                        </button>
                                         {job.status === 'COMPLETED' && (
-                                            <button 
-                                                onClick={() => openFileBrowser(job.id)}
-                                                className="p-2 text-accent hover:bg-accent/10 rounded-lg transition-colors"
-                                                title="Browse Files"
-                                            >
+                                            <button onClick={() => openFileBrowser(job.id)} className="p-2 text-accent hover:bg-accent/10 rounded-lg transition-colors" title="Browse Files">
                                                 <FileText className="w-4 h-4" />
                                             </button>
                                         )}
-                                        <button 
-                                            onClick={() => handleDelete(job.id)}
-                                            className="p-2 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors"
-                                            title="Delete Operation"
-                                        >
+                                        <button onClick={() => handleDelete(job.id)} className="p-2 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors" title="Delete Operation">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
@@ -371,111 +467,129 @@ const IngestionPage: React.FC = () => {
                 </div>
             </motion.div>
 
+            {/* Job Detail Modal */}
+            <AnimatePresence>
+                {(detailJob || detailLoading) && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setDetailJob(null); setScreenshotUrl(null); }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="relative bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="p-6 border-b border-border flex justify-between items-center">
+                                <h3 className="font-bold text-lg">Job Detail</h3>
+                                <button onClick={() => { setDetailJob(null); setScreenshotUrl(null); }} className="p-2 hover:bg-white/10 rounded-lg"><X className="w-5 h-5" /></button>
+                            </div>
+                            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                                {detailLoading ? (
+                                    <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-accent" /></div>
+                                ) : detailJob ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">URL</span><span className="text-white break-all">{detailJob.url}</span></div>
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">Source</span><span className="text-white">{detailJob.source_name || '—'}</span></div>
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">Status</span><span className={`font-semibold ${getStatusTheme(detailJob.status).text}`}>{detailJob.status}</span></div>
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">Strategy</span><span className="text-white">{detailJob.strategy || 'N/A'}</span></div>
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">Started</span><span className="text-white">{new Date(detailJob.started_ts).toLocaleString()}</span></div>
+                                            <div className="glass-panel p-3"><span className="text-text-secondary block text-xs mb-1">Completed</span><span className="text-white">{detailJob.completed_ts ? new Date(detailJob.completed_ts).toLocaleString() : '—'}</span></div>
+                                        </div>
+
+                                        {detailJob.error_code && (
+                                            <div className="bg-error/10 border border-error/30 text-error p-4 rounded-xl text-sm">
+                                                <span className="font-semibold block mb-1">Error</span>
+                                                {detailJob.error_code}
+                                            </div>
+                                        )}
+
+                                        {(detailJob.status === 'FAILED' || detailJob.status === 'CAPTCHA_DETECTED') && (
+                                            <button onClick={() => handleResolve(detailJob.id)} className="btn-primary flex items-center gap-2 w-full justify-center">
+                                                <CheckSquare className="w-4 h-4" /> Mark as Resolved
+                                            </button>
+                                        )}
+
+                                        {detailJob.evidences.length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold mb-3 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-purple-400" /> Evidence Artifacts ({detailJob.evidences.length})</h4>
+                                                <div className="space-y-2">
+                                                    {detailJob.evidences.map(ev => (
+                                                        <div key={ev.id} className="glass-panel p-3 flex justify-between items-center text-sm">
+                                                            <div>
+                                                                <span className={`px-2 py-0.5 rounded text-xs font-medium mr-2 ${ev.type === 'screenshot' ? 'bg-purple-500/20 text-purple-400' : 'bg-accent/20 text-accent'}`}>{ev.type}</span>
+                                                                <span className="font-mono text-xs text-text-secondary">SHA: {ev.file_hash?.slice(0, 16)}...</span>
+                                                            </div>
+                                                            {ev.type === 'screenshot' && (
+                                                                <button onClick={() => viewScreenshot(ev.id)} className="text-xs text-accent hover:text-accent-hover flex items-center gap-1">
+                                                                    <Image className="w-3 h-3" /> View
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {screenshotUrl && (
+                                            <div className="mt-4">
+                                                <h4 className="font-semibold mb-2">Screenshot Preview</h4>
+                                                <img src={screenshotUrl} alt="Evidence screenshot" className="w-full rounded-xl border border-border" />
+                                            </div>
+                                        )}
+                                    </>
+                                ) : null}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* File Browser Overlay */}
             <AnimatePresence>
                 {browsingJob !== null && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-end">
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={closeFileBrowser}
-                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        />
-                        <motion.div 
-                            initial={{ x: '100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '100%' }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="relative w-full max-w-2xl h-full bg-surface border-l border-border shadow-2xl flex flex-col"
-                        >
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeFileBrowser} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="relative w-full max-w-2xl h-full bg-surface border-l border-border shadow-2xl flex flex-col">
                             <div className="p-6 border-b border-border flex justify-between items-center bg-surface/50 backdrop-blur-md sticky top-0 z-10">
                                 <div className="flex items-center gap-3">
                                     {selectedFile ? (
-                                        <button 
-                                            onClick={() => { setSelectedFile(null); setFileContent(null); }}
-                                            className="p-2 hover:bg-white/10 rounded-lg transition-colors mr-1"
-                                        >
-                                            <ChevronLeft className="w-5 h-5" />
-                                        </button>
+                                        <button onClick={() => { setSelectedFile(null); setFileContent(null); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors mr-1"><ChevronLeft className="w-5 h-5" /></button>
                                     ) : (
-                                        <div className="p-2 bg-accent/20 rounded-lg text-accent">
-                                            <FileText className="w-5 h-5" />
-                                        </div>
+                                        <div className="p-2 bg-accent/20 rounded-lg text-accent"><FileText className="w-5 h-5" /></div>
                                     )}
                                     <div>
-                                        <h3 className="font-bold text-lg leading-tight">
-                                            {selectedFile ? 'Content Viewer' : 'Extracted Documents'}
-                                        </h3>
-                                        <p className="text-xs text-text-secondary uppercase tracking-widest font-mono">
-                                            JOB-{browsingJob.toString().padStart(4, '0')}
-                                        </p>
+                                        <h3 className="font-bold text-lg leading-tight">{selectedFile ? 'Content Viewer' : 'Extracted Documents'}</h3>
+                                        <p className="text-xs text-text-secondary uppercase tracking-widest font-mono">JOB-{browsingJob!.toString().padStart(4, '0')}</p>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={closeFileBrowser}
-                                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <button onClick={closeFileBrowser} className="p-2 hover:bg-white/10 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
                             </div>
-
                             <div className="flex-1 overflow-y-auto p-6">
                                 {isFilesLoading ? (
                                     <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-50">
-                                        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-                                        <p className="text-sm font-medium">Accessing vault...</p>
+                                        <Loader2 className="w-8 h-8 animate-spin text-accent" /><p className="text-sm font-medium">Accessing vault...</p>
                                     </div>
                                 ) : selectedFile ? (
-                                    <motion.div 
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="prose prose-invert prose-accent max-w-none"
-                                    >
+                                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="prose prose-invert prose-accent max-w-none">
                                         <div className="mb-6 p-4 rounded-xl bg-white/5 border border-border flex justify-between items-center group">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="p-2 bg-white/10 rounded-lg">
-                                                    <FileText className="w-4 h-4" />
-                                                </div>
+                                                <div className="p-2 bg-white/10 rounded-lg"><FileText className="w-4 h-4" /></div>
                                                 <span className="text-sm font-mono truncate text-text-secondary">{selectedFile}</span>
                                             </div>
                                             <ExternalLink className="w-4 h-4 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
                                         </div>
                                         <div className="glass-panel p-6 overflow-x-auto">
-                                            <div className="markdown-content">
-                                                <ReactMarkdown>
-                                                    {fileContent || ''}
-                                                </ReactMarkdown>
-                                            </div>
+                                            <div className="markdown-content"><ReactMarkdown>{fileContent || ''}</ReactMarkdown></div>
                                         </div>
                                     </motion.div>
                                 ) : (
                                     <div className="space-y-3">
                                         {fileList.length === 0 ? (
-                                            <div className="text-center py-20 opacity-50">
-                                                <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                                <p>No documents extracted for this operation.</p>
-                                            </div>
-                                        ) : (
-                                            fileList.map((file: string, idx: number) => (
-                                                <motion.button
-                                                    key={file}
-                                                    initial={{ opacity: 0, x: 20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: idx * 0.05 }}
-                                                    onClick={() => loadFileContent(file)}
-                                                    className="w-full text-left glass-panel p-4 flex items-center justify-between hover:bg-white/5 hover:border-accent/40 transition-all group"
-                                                >
-                                                    <div className="flex items-center gap-4 min-w-0">
-                                                        <div className="p-2 bg-surface border border-border rounded-lg group-hover:text-accent group-hover:border-accent/30 transition-colors">
-                                                            <FileText className="w-4 h-4" />
-                                                        </div>
-                                                        <span className="font-mono text-sm truncate">{file}</span>
-                                                    </div>
-                                                    <ChevronRight className="w-4 h-4 text-text-secondary group-hover:text-accent group-hover:translate-x-1 transition-all" />
-                                                </motion.button>
-                                            ))
-                                        )}
+                                            <div className="text-center py-20 opacity-50"><FileText className="w-12 h-12 mx-auto mb-4 opacity-20" /><p>No documents extracted for this operation.</p></div>
+                                        ) : fileList.map((file: string, idx: number) => (
+                                            <motion.button key={file} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }} onClick={() => loadFileContent(file)} className="w-full text-left glass-panel p-4 flex items-center justify-between hover:bg-white/5 hover:border-accent/40 transition-all group">
+                                                <div className="flex items-center gap-4 min-w-0">
+                                                    <div className="p-2 bg-surface border border-border rounded-lg group-hover:text-accent group-hover:border-accent/30 transition-colors"><FileText className="w-4 h-4" /></div>
+                                                    <span className="font-mono text-sm truncate">{file}</span>
+                                                </div>
+                                                <ChevronRight className="w-4 h-4 text-text-secondary group-hover:text-accent group-hover:translate-x-1 transition-all" />
+                                            </motion.button>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -486,13 +600,9 @@ const IngestionPage: React.FC = () => {
 
             <AnimatePresence>
                 {toast && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                      className={`fixed bottom-8 right-8 z-50 glass-panel px-6 py-4 border-l-4 shadow-2xl flex items-center gap-3 ${
-                          toast.type === 'success' ? 'border-l-success' : 'border-l-error'
-                      }`}
+                    <motion.div
+                      initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                      className={`fixed bottom-8 right-8 z-50 glass-panel px-6 py-4 border-l-4 shadow-2xl flex items-center gap-3 ${toast.type === 'success' ? 'border-l-success' : 'border-l-error'}`}
                     >
                         <div className={`w-2 h-2 rounded-full ${toast.type === 'success' ? 'bg-success' : 'bg-error'} animate-pulse`} />
                         <span className="font-medium">{toast.message}</span>
