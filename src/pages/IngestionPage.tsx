@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, RefreshCw, Link2, ShieldAlert, CheckCircle2, ChevronRight, Trash2, FileText, X, ExternalLink, ChevronLeft } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
-
-const API_BASE = "http://127.0.0.1:8000";
+import api from '../api';
 
 interface Job {
   id: number;
@@ -22,6 +20,7 @@ const IngestionPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [deepCrawl, setDeepCrawl] = useState(false);
     const [maxDepth, setMaxDepth] = useState(2);
+    const [schedule, setSchedule] = useState('');
     const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
     const [browsingJob, setBrowsingJob] = useState<number | null>(null);
     const [fileList, setFileList] = useState<string[]>([]);
@@ -31,7 +30,7 @@ const IngestionPage: React.FC = () => {
 
     const loadJobs = async () => {
         try {
-            const response = await axios.get(`${API_BASE}/api/jobs`);
+            const response = await api.get(`/api/jobs`);
             setJobs(response.data.jobs);
         } catch (err) {
             console.error("Failed to load jobs", err);
@@ -54,11 +53,12 @@ const IngestionPage: React.FC = () => {
         setLoading(true);
 
         try {
-            const response = await axios.post(`${API_BASE}/api/ingest`, {
+            const response = await api.post(`/api/ingest`, {
                 url,
                 source_name: sourceName,
                 deep_crawl: deepCrawl,
-                max_depth: maxDepth
+                max_depth: maxDepth,
+                schedule: schedule || null,
             });
             
             const { status, message } = response.data;
@@ -81,7 +81,7 @@ const IngestionPage: React.FC = () => {
         if (!confirm("Are you sure you want to delete this operation and all its data?")) return;
         
         try {
-            await axios.delete(`${API_BASE}/api/jobs/${id}`);
+            await api.delete(`/api/jobs/${id}`);
             showToast("Operation deleted successfully", "success");
             loadJobs();
         } catch (err) {
@@ -96,7 +96,7 @@ const IngestionPage: React.FC = () => {
         setSelectedFile(null);
         setFileContent(null);
         try {
-            const response = await axios.get(`${API_BASE}/api/jobs/${jobId}/files`);
+            const response = await api.get(`/api/jobs/${jobId}/files`);
             setFileList(response.data.files);
         } catch (err) {
             console.error("Failed to load files", err);
@@ -110,7 +110,7 @@ const IngestionPage: React.FC = () => {
         setIsFilesLoading(true);
         setSelectedFile(filename);
         try {
-            const response = await axios.get(`${API_BASE}/api/files/${filename}`);
+            const response = await api.get(`/api/files/${filename}`);
             setFileContent(response.data.content);
         } catch (err) {
             console.error("Failed to load file content", err);
@@ -193,6 +193,23 @@ const IngestionPage: React.FC = () => {
                             required
                             className="glass-input"
                         />
+                        <div className="md:col-span-full px-2 mb-2">
+                            <label className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2 block">
+                                Auto Schedule
+                            </label>
+                            <select
+                                value={schedule}
+                                onChange={(e) => setSchedule(e.target.value)}
+                                className="glass-input w-full md:w-auto min-w-[200px]"
+                            >
+                                <option value="">Manual only</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                        </div>
+
                          <div className="flex items-center gap-2 px-2 md:col-span-full mb-2">
                              <input 
                                  type="checkbox" 

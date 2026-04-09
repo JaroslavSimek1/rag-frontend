@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Search as SearchIcon, Loader2, Bot, Database, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
-
-const API_BASE = "http://127.0.0.1:8000";
+import api from '../api';
 
 interface SearchResult {
     answer: string;
@@ -23,7 +21,7 @@ const SearchPage: React.FC = () => {
         setError(null);
         
         try {
-            const response = await axios.post(`${API_BASE}/api/search`, {
+            const response = await api.post(`/api/search`, {
                 query,
                 k: 5
             });
@@ -38,7 +36,7 @@ const SearchPage: React.FC = () => {
 
     const handleOpenFile = async (filename: string) => {
         try {
-            const response = await axios.get(`${API_BASE}/api/files/${filename}`);
+            const response = await api.get(`/api/files/${filename}`);
             setSelectedFile({ name: filename, content: response.data.content });
         } catch (err) {
             console.error("Failed to load file content", err);

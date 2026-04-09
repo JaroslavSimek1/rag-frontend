@@ -1,12 +1,32 @@
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import IngestionPage from './pages/IngestionPage';
 import SearchPage from './pages/SearchPage';
-import { Database, Search, Bot } from 'lucide-react';
+import LoginPage from './pages/LoginPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Database, Search, Bot, LogIn, LogOut, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/search" />;
+  if (user.role !== 'admin') return <Navigate to="/search" />;
+
+  return <>{children}</>;
+}
 
 function Navigation() {
   const location = useLocation();
-  
+  const { user, login, logout } = useAuth();
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
       <div className="max-w-6xl mx-auto">
@@ -19,38 +39,40 @@ function Navigation() {
               A.S.S. Lover
             </span>
           </div>
-          
-          <div className="flex space-x-2">
-            <Link 
-              to="/" 
+
+          <div className="flex items-center space-x-2">
+            {user?.role === 'admin' && (
+              <Link
+                to="/"
+                className={`relative flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  location.pathname === '/'
+                    ? 'text-white'
+                    : 'text-text-secondary hover:text-white hover:bg-surface'
+                }`}
+              >
+                {location.pathname === '/' && (
+                  <motion.div
+                    layoutId="nav-pill"
+                    className="absolute inset-0 bg-accent/20 border border-accent/30 rounded-xl -z-10"
+                    initial={false}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  />
+                )}
+                <Database className="w-4 h-4 mr-2" />
+                Ingestion
+              </Link>
+            )}
+
+            <Link
+              to="/search"
               className={`relative flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
-                location.pathname === '/' 
-                  ? 'text-white' 
-                  : 'text-text-secondary hover:text-white hover:bg-surface'
-              }`}
-            >
-              {location.pathname === '/' && (
-                <motion.div 
-                  layoutId="nav-pill"
-                  className="absolute inset-0 bg-accent/20 border border-accent/30 rounded-xl -z-10"
-                  initial={false}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                />
-              )}
-              <Database className="w-4 h-4 mr-2" />
-              Ingestion
-            </Link>
-            
-            <Link 
-              to="/search" 
-              className={`relative flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
-                location.pathname === '/search' 
-                  ? 'text-white' 
+                location.pathname === '/search'
+                  ? 'text-white'
                   : 'text-text-secondary hover:text-white hover:bg-surface'
               }`}
             >
               {location.pathname === '/search' && (
-                <motion.div 
+                <motion.div
                   layoutId="nav-pill"
                   className="absolute inset-0 bg-purple-500/20 border border-purple-500/30 rounded-xl -z-10"
                   initial={false}
@@ -60,6 +82,25 @@ function Navigation() {
               <Search className="w-4 h-4 mr-2" />
               RAG Search
             </Link>
+
+            {user ? (
+              <button
+                onClick={logout}
+                className="flex items-center px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:text-white hover:bg-surface transition-all duration-300 ml-2"
+                title={`Logged in as ${user.username}`}
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                {user.username}
+              </button>
+            ) : (
+              <button
+                onClick={login}
+                className="flex items-center px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:text-white hover:bg-surface transition-all duration-300 ml-2"
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                Login
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -67,7 +108,6 @@ function Navigation() {
   );
 }
 
-// Background animation component for premium feel
 function BackgroundGlow() {
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none z-[-1]">
@@ -81,17 +121,24 @@ function BackgroundGlow() {
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-bg text-text-primary selection:bg-accent/30">
-        <BackgroundGlow />
-        <Navigation />
-        
-        <main className="max-w-6xl mx-auto px-4 pt-32 pb-16">
-          <Routes>
-            <Route path="/" element={<IngestionPage />} />
-            <Route path="/search" element={<SearchPage />} />
-          </Routes>
-        </main>
-      </div>
+      <AuthProvider>
+        <div className="min-h-screen bg-bg text-text-primary selection:bg-accent/30">
+          <BackgroundGlow />
+          <Navigation />
+
+          <main className="max-w-6xl mx-auto px-4 pt-32 pb-16">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <IngestionPage />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </main>
+        </div>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
